@@ -93,6 +93,11 @@ from transformers.models.bart.modeling_bart import BartEncoder, BartDecoder, Bar
 
 TODO_SVD = '_todo_svd'
 
+if torch.cuda.is_available():
+    device = torch.device('cuda:0')
+else:
+    device = torch.device('cpu')
+
 
 def householder(tensor: Tensor, vec: Tensor) -> Tensor:
     vec = F.normalize(vec, p=2, dim=-1)
@@ -104,7 +109,7 @@ class HouseSvdEmbedding(nn.Module):
         super(HouseSvdEmbedding, self).__init__()
 
         with torch.no_grad():
-            u, s, v = torch.linalg.svd(embedding.weight.data.cuda(), full_matrices=False)
+            u, s, v = torch.linalg.svd(embedding.weight.data.to(device=device), full_matrices=False)
 
         self.register_buffer('u', u.clone().detach())
         self.register_buffer('z', s.clone().detach())
@@ -129,7 +134,6 @@ class HouseSvdEmbedding(nn.Module):
         self.norm_type = embedding.norm_type
         self.scale_grad_by_freq = embedding.scale_grad_by_freq
         self.sparse = embedding.sparse
-        self.weight = {}
 
     def extra_repr(self) -> str:
         return ', '.join([
@@ -140,19 +144,36 @@ class HouseSvdEmbedding(nn.Module):
         ])
 
     def forward(self, tensor: Tensor) -> Tensor:
-        weight = F.embedding(
-            weight=self.u, input=tensor, padding_idx=self.padding_idx,
+        if self.training or getattr(self, TODO_SVD, True):
+            weight = self.u
+
+            for vec in self.left:
+                weight = householder(weight, vec=vec)
+            weight = weight * self.s
+            for vec in self.right:
+                weight = householder(weight, vec=vec)
+
+            self.weight = F.linear(weight, weight=self.v.t())
+            setattr(self, TODO_SVD, self.training)
+
+        return F.embedding(
+            weight=self.weight, input=tensor, padding_idx=self.padding_idx,
             max_norm=self.max_norm, norm_type=self.norm_type,
             scale_grad_by_freq=self.scale_grad_by_freq, sparse=self.sparse
         )
 
-        for vec in self.left:
-            weight = householder(weight, vec=vec)
-        weight = weight * self.s
-        for vec in self.right:
-            weight = householder(weight, vec=vec)
 
-        return weight @ self.v
+class ForwardEmbedding(nn.Module):
+    def __init__(self, *, embedding: HouseSvdEmbedding) -> None:
+        super(ForwardEmbedding, self).__init__()
+
+        self.embedding = embedding
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.embedding.extra_repr()})'
+
+    def forward(self, tensor: Tensor) -> Tensor:
+        return self.embedding(tensor)
 
 
 class TiedLinear(nn.Module):
@@ -162,25 +183,10 @@ class TiedLinear(nn.Module):
         self.embedding = embedding
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self.extra_repr()})'
-
-    def extra_repr(self) -> str:
-        return ', '.join([
-            f'{self.embedding.num_embeddings}',
-            f'{self.embedding.embedding_dim}',
-            f'{self.embedding.padding_idx}',
-        ])
+        return f'{self.__class__.__name__}({self.embedding.extra_repr()})'
 
     def forward(self, tensor: Tensor) -> Tensor:
-        tensor = F.linear(tensor, weight=self.embedding.v)
-
-        for vec in self.embedding.right:
-            tensor = householder(tensor, vec=vec)
-        tensor = tensor * self.embedding.s
-        for vec in self.embedding.left:
-            tensor = householder(tensor, vec=vec)
-
-        return F.linear(tensor, weight=self.embedding.u)
+        return F.linear(tensor, weight=self.embedding.weight)
 
 
 class HouseMultiHeadReadLinear(nn.Module):
@@ -189,7 +195,7 @@ class HouseMultiHeadReadLinear(nn.Module):
 
         with torch.no_grad():
             u, s, v = torch.linalg.svd(
-                rearrange(linear.weight.data.cuda(), '(h y) x -> h y x', h=num_heads),
+                rearrange(linear.weight.data.to(device=device), '(h y) x -> h y x', h=num_heads),
                 full_matrices=False,
             )
 
@@ -213,7 +219,6 @@ class HouseMultiHeadReadLinear(nn.Module):
         self.out_features = linear.out_features
         self.bias = linear.bias
         self.num_heads = num_heads
-        self.weight = {}
 
     def extra_repr(self) -> str:
         return ', '.join([
@@ -247,10 +252,10 @@ class HouseMultiHeadReadLinear(nn.Module):
             for vec in self.outside:
                 weight = householder(weight, vec=vec[:, None, :])
 
-            self.weight[tensor.device] = (weight @ self.v).flatten(end_dim=1)
+            self.weight = (weight @ self.v).flatten(end_dim=1)
             setattr(self, TODO_SVD, self.training)
 
-        return F.linear(tensor, weight=self.weight[tensor.device], bias=self.bias)
+        return F.linear(tensor, weight=self.weight, bias=self.bias)
 
 
 class HouseMultiHeadWriteLinear(nn.Module):
@@ -260,7 +265,7 @@ class HouseMultiHeadWriteLinear(nn.Module):
 
         with torch.no_grad():
             u, s, v = torch.linalg.svd(
-                rearrange(linear.weight.data.cuda(), 'y (h x) -> h y x', h=num_heads),
+                rearrange(linear.weight.data.to(device=device), 'y (h x) -> h y x', h=num_heads),
                 full_matrices=False,
             )
 
@@ -284,7 +289,6 @@ class HouseMultiHeadWriteLinear(nn.Module):
         self.out_features = linear.out_features
         self.bias = linear.bias
         self.num_heads = num_heads
-        self.weight = {}
 
     def extra_repr(self) -> str:
         return ', '.join([
@@ -319,10 +323,10 @@ class HouseMultiHeadWriteLinear(nn.Module):
             for vec in self.inside:
                 weight = householder(weight, vec=vec[:, None, :])
 
-            self.weight[tensor.device] = (weight @ self.v).transpose(0, 1).flatten(start_dim=-2)
+            self.weight = (weight @ self.v).transpose(0, 1).flatten(start_dim=-2)
             setattr(self, TODO_SVD, self.training)
 
-        return F.linear(tensor, weight=self.weight[tensor.device], bias=self.bias)
+        return F.linear(tensor, weight=self.weight, bias=self.bias)
 
 
 # if __name__ == '__main__':
@@ -479,7 +483,7 @@ def house(keys: str = 'qiao', size: int = 1, inside: int = 0, outside: int = 2,
         embedding = HouseSvdEmbedding(embedding=model.model.shared, sigma=True, left=inside, right=outside)
         model.model.shared = embedding
         model.model.encoder.embed_tokens = embedding
-        model.model.decoder.embed_tokens = embedding
+        model.model.decoder.embed_tokens = ForwardEmbedding(embedding=embedding)
         model.lm_head = TiedLinear(embedding=embedding)
 
 
@@ -949,7 +953,8 @@ def main():
     logger.info(f'model => {model}')
 
     for name, param in model.named_parameters():
-        logger.info(f'{name}.size() => {param.size()}')
+        if param.requires_grad:
+            logger.info(f'{name}.size() => {param.size()}')
 
     # Metric
     metric = load_metric("rouge")

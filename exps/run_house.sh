@@ -24,12 +24,12 @@ DATE=$(date +%Y%m%d)
 dataset="xsum"
 
 # ----- MAM adapter -----
-attn_mode="prefix"
+attn_mode="none"
 attn_option="concat"
 attn_composition="add"
 attn_bn=30 # attn bottleneck dim
 
-ffn_mode="adapter"
+ffn_mode="none"
 ffn_option="parallel"
 ffn_adapter_layernorm_option="none"
 ffn_adapter_init_option="lora"
@@ -141,8 +141,8 @@ max_steps=100000
 num_train_epochs=30
 warmup_updates=0
 lr_scheduler_type="polynomial"
-bsz=21
-gradient_steps=3
+bsz=32
+gradient_steps=2
 
 metric=rouge2
 unfreeze='ef_'
