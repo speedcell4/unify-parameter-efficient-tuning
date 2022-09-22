@@ -141,8 +141,8 @@ max_steps=100000
 num_train_epochs=30
 warmup_updates=0
 lr_scheduler_type="polynomial"
-bsz=32
-gradient_steps=2
+bsz=21
+gradient_steps=3
 
 metric=rouge2
 unfreeze='ef_'
