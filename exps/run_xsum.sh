@@ -186,7 +186,7 @@ exp_name+=.fl_${ffn_adapter_layernorm_option}.finit_${ffn_adapter_init_option}.f
 exp_name+=.unfrz_${unfreeze}.ms${max_steps}.ls${label_smoothing_factor}
 exp_name+=.warm${warmup_updates}.wd${weight_decay}${debug_str}
 
-SAVE=checkpoints/${dataset}/${DATE}/${exp_name}
+SAVE=checkpoints/${dataset}/mam/${exp_name}
 
 rm -rf ${SAVE}; mkdir -p ${SAVE}
 
@@ -244,7 +244,7 @@ rm checkpoints/hf_model/*.lock
     --eval_steps ${save_steps} \
     --load_best_model_at_end \
     --report_to ${report_to} \
-    --run_name ${dataset}.${DATE}.${exp_name} \
+    --run_name ${dataset}.mam.${exp_name} \
     --overwrite_output_dir "True" \
     --disable_tqdm "False" \
     --metric_for_best_model ${metric} \

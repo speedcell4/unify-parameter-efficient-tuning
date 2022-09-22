@@ -172,7 +172,7 @@ if [ "${debug}" = 1 ]; then
   debug_str=".debug"
 fi
 
-exp_name=${lr:-"5e-5"}-${label_smoothing_factor:-"0.1"}-${num_rotations:-2}-${decompose_embed:-"True"}
+exp_name=${lr:-"5e-5"}-${label_smoothing_factor:-"0.1"}-${num_rotations:-2}-${decompose_embed:-"True"}-${use_res:-"True"}-${fc_size:-"4"}
 
 SAVE=checkpoints/${dataset}/${STUDY:-"demo"}/${exp_name}
 
@@ -241,6 +241,8 @@ TRANSFORMERS_OFFLINE=1 NUM_DEVICES=1 /home/MLTL/yiran-wang/miniconda3/envs/tunin
   --predict_with_generate \
   --num_rotations ${num_rotations:-2} \
   --decompose_embed ${decompose_embed:-"True"} \
+  --use_res ${use_res:-"True"} \
+  --fc_size ${fc_size:-"4"} \
   --output_dir ${SAVE} ${extra_cmd} 2>&1 | tee ${SAVE}/log.txt
 # --predict_with_generate
 # --metric_for_best_model ${metric} \
