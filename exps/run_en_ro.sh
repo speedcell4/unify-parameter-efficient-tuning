@@ -181,7 +181,7 @@ python -u examples/pytorch/translation/run_translation.py \
     --report_to ${report_to} \
     --run_name ${dataset}.${DATE}.${exp_name} \
     --overwrite_output_dir \
-    --disable_tqdm "True" \
+    --disable_tqdm "False" \
     --metric_for_best_model ${metric} \
     --greater_is_better "False" \
     --ddp_find_unused_parameter "False" \

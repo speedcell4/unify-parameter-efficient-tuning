@@ -27,9 +27,9 @@ from typing import Optional
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import load_dataset, load_metric
+from filelock import FileLock
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -45,7 +45,6 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
-import sys
 sys.path.insert(2, "./")
 
 from petl.options import (
@@ -53,7 +52,6 @@ from petl.options import (
     TuneArguments,
 )
 from petl.petl_encdec_model import PETLEncDecModel
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.9.0.dev0")
@@ -104,7 +102,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+                    "with private models)."
         },
     )
 
@@ -136,7 +134,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "An optional input evaluation data file to evaluate the metrics (rouge) on "
-            "(a jsonlines or csv file)."
+                    "(a jsonlines or csv file)."
         },
     )
     test_file: Optional[str] = field(
@@ -156,52 +154,52 @@ class DataTrainingArguments:
         default=1024,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     max_target_length: Optional[int] = field(
         default=128,
         metadata={
             "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     val_max_target_length: Optional[int] = field(
         default=None,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-            "during ``evaluate`` and ``predict``."
+                    "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                    "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+                    "during ``evaluate`` and ``predict``."
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
             "help": "Whether to pad all samples to model maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
-            "efficient on GPU but very bad for TPU."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+                    "efficient on GPU but very bad for TPU."
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     ignore_pad_token_for_loss: bool = field(
@@ -257,12 +255,13 @@ def main():
 
     parser = HfArgumentParser(
         (ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments,
-            GenerationArguments, TuneArguments)
-        )
+         GenerationArguments, TuneArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args, gen_args, tune_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args, gen_args, tune_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args, gen_args, tune_args = parser.parse_args_into_dataclasses()
 
@@ -352,7 +351,6 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-
 
     # put generation args into config
     for k, v in vars(gen_args).items():
@@ -522,22 +520,21 @@ def main():
         pad_to_multiple_of=8 if training_args.fp16 else None,
     )
 
-
     # added by Chunting: prepare the finetuning model
     if tune_args.attn_mode != "none" or tune_args.ffn_mode != "none":
         if tune_args.load_path == "":
             model = PETLEncDecModel(config, tune_args, model)
         else:
             model = PETLEncDecModel.from_pretrained(
-                    tune_args.load_path,
-                    from_tf=bool(".ckpt" in model_args.model_name_or_path),
-                    config=config,
-                    cache_dir=model_args.cache_dir,
-                    revision=model_args.model_revision,
-                    use_auth_token=True if model_args.use_auth_token else None,
-                    args=tune_args,
-                    pretrained_model=model,
-                    )
+                tune_args.load_path,
+                from_tf=bool(".ckpt" in model_args.model_name_or_path),
+                config=config,
+                cache_dir=model_args.cache_dir,
+                revision=model_args.model_revision,
+                use_auth_token=True if model_args.use_auth_token else None,
+                args=tune_args,
+                pretrained_model=model,
+            )
 
     # print(model)
 
@@ -570,12 +567,15 @@ def main():
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Some simple post-processing
-        decoded_preds, decoded_labels, str_decoded_preds, str_decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+        decoded_preds, decoded_labels, str_decoded_preds, str_decoded_labels = postprocess_text(decoded_preds,
+                                                                                                decoded_labels)
 
         # only write in the main process
         if trainer.is_world_process_zero():
-            fout_pred = open(os.path.join(training_args.output_dir, f"{gen_prefix}.pred.summary"), "w", encoding="utf-8")
-            fout_gold = open(os.path.join(training_args.output_dir, f"{gen_prefix}.gold.summary"), "w", encoding="utf-8")
+            fout_pred = open(os.path.join(training_args.output_dir, f"{gen_prefix}.pred.summary"), "w",
+                             encoding="utf-8")
+            fout_gold = open(os.path.join(training_args.output_dir, f"{gen_prefix}.gold.summary"), "w",
+                             encoding="utf-8")
             for pred, gold in zip(str_decoded_preds, str_decoded_labels):
                 # print(pred)
                 # print(gold)

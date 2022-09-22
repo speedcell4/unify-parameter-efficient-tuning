@@ -147,8 +147,8 @@ num_train_epochs=30
 warmup_updates=0
 lr=5e-5
 lr_scheduler_type="polynomial"
-bsz=16
-gradient_steps=4
+bsz=21
+gradient_steps=3
 
 metric=rouge2
 unfreeze='ef_'
@@ -246,7 +246,7 @@ python -u examples/pytorch/summarization/run_summarization.py \
     --report_to ${report_to} \
     --run_name ${dataset}.${DATE}.${exp_name} \
     --overwrite_output_dir "True" \
-    --disable_tqdm "True" \
+    --disable_tqdm "False" \
     --metric_for_best_model ${metric} \
     --greater_is_better "True" \
     --predict_with_generate \
